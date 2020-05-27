@@ -41,6 +41,7 @@ use callbacks::stats::SimpleStats;
 use callbacks::clusterizer::Clusterizer;
 use callbacks::csvdump::CsvDump;
 use callbacks::utxodump::UTXODump;
+use callbacks::txodump:TXODump;
 
 
 /// Holds all available user arguments
@@ -236,6 +237,7 @@ fn parse_args() -> OpResult<ParserOptions> {
         // Add callbacks
         .subcommand(CsvDump::build_subcommand())
         .subcommand(UTXODump::build_subcommand())
+        .subcommand(TXODump::build_subcommand())
         .subcommand(Clusterizer::build_subcommand())
         .subcommand(SimpleStats::build_subcommand())
         .get_matches();
@@ -270,6 +272,8 @@ fn parse_args() -> OpResult<ParserOptions> {
         callback = Box::new(try!(Clusterizer::new(matches)));
     } else if let Some(ref matches) = matches.subcommand_matches("utxodump") {
         callback = Box::new(try!(UTXODump::new(matches)));
+    } else if let Some(ref matches) = matches.subcommand_matches("txodump") {
+        callback = Box::new(try!(TXODump::new(matches)));
     } else {
         clap::Error {
                 message: String::from("error: No Callback specified.\nFor more information try --help"),
