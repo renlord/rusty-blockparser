@@ -70,10 +70,10 @@ impl Callback for TXODump {
     where
         Self: Sized,
     {
-        SubCommand::with_name("TXODump")
-            .about("Dumps the UTXO set into a CSV file")
+        SubCommand::with_name("txodump")
+            .about("Dumps the spent transaction outputs into a CSV file")
             .version("0.1")
-            .author("Michele Spagnuolo <mikispag@gmail.com>")
+            .author("RY")
             .arg(
                 Arg::with_name("dump-folder")
                     .help("Folder to store the CSV file")
