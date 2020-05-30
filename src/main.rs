@@ -2,16 +2,16 @@
 
 #[macro_use]
 extern crate log;
-extern crate time;
 extern crate crypto;
+extern crate time;
 #[macro_use]
 extern crate clap;
-extern crate rustc_serialize;
-extern crate twox_hash;
 extern crate byteorder;
-extern crate rust_base58;
 extern crate csv;
+extern crate rust_base58;
+extern crate rustc_serialize;
 extern crate seek_bufread;
+extern crate twox_hash;
 
 #[macro_use]
 pub mod errors;
@@ -20,29 +20,28 @@ pub mod common;
 #[macro_use]
 pub mod callbacks;
 
-use std::fs;
-use std::path::{Path, PathBuf};
-use std::io::ErrorKind;
-use std::sync::mpsc;
 use std::boxed::Box;
+use std::fs;
+use std::io::ErrorKind;
+use std::path::{Path, PathBuf};
+use std::sync::mpsc;
 
-use clap::{Arg, App};
+use clap::{App, Arg};
 use log::LogLevelFilter;
 
 use blockchain::parser::chain;
-use blockchain::parser::types::{CoinType, Bitcoin};
+use blockchain::parser::types::{Bitcoin, CoinType};
+use blockchain::parser::{BlockchainParser, ParseMode};
 use blockchain::utils;
 use blockchain::utils::blkfile::BlkFile;
-use blockchain::parser::{ParseMode, BlockchainParser};
-use common::logger::SimpleLogger;
-use errors::{OpError, OpErrorKind, OpResult};
-use callbacks::Callback;
-use callbacks::stats::SimpleStats;
 use callbacks::clusterizer::Clusterizer;
 use callbacks::csvdump::CsvDump;
+use callbacks::stats::SimpleStats;
+use callbacks::txodump::TXODump;
 use callbacks::utxodump::UTXODump;
-use callbacks::txodump:TXODump;
-
+use callbacks::Callback;
+use common::logger::SimpleLogger;
+use errors::{OpError, OpErrorKind, OpResult};
 
 /// Holds all available user arguments
 pub struct ParserOptions {
@@ -60,7 +59,6 @@ pub struct ParserOptions {
 }
 
 fn main() {
-
     // Init user args
     let mut options = match parse_args() {
         Ok(o) => o,
@@ -102,22 +100,20 @@ fn main() {
         // Determine starting location based on previous scans.
         let start_blk_idx = match chain_file.len() == 0 || options.reindex {
             true => 0,
-            false => {
-                match chain_file.latest_blk_idx < 1 {
-                    true => 0,
-                    false => chain_file.latest_blk_idx - 1,
-                }
-            }
+            false => match chain_file.latest_blk_idx < 1 {
+                true => 0,
+                false => chain_file.latest_blk_idx - 1,
+            },
         };
 
         // Load blk files from blockchain dir
         let blk_files = match BlkFile::from_path(options.blockchain_dir.clone(), start_blk_idx) {
             Ok(files) => files,
             Err(e) => {
-                error!("Cannot load blockchain from: '{:?}' (start_blk_idx = {}). {}",
-                       &options.blockchain_dir,
-                       start_blk_idx,
-                       e);
+                error!(
+                    "Cannot load blockchain from: '{:?}' (start_blk_idx = {}). {}",
+                    &options.blockchain_dir, start_blk_idx, e
+                );
                 return;
             }
         };
@@ -131,7 +127,8 @@ fn main() {
         {
             // Start parser
             let (tx, rx) = mpsc::sync_channel(options.worker_backlog);
-            let mut parser = BlockchainParser::new(&mut options, parse_mode.clone(), blk_files, chain_file);
+            let mut parser =
+                BlockchainParser::new(&mut options, parse_mode.clone(), blk_files, chain_file);
 
             // Start threads
             if let Some(err) = parser.start_worker(tx).err() {
@@ -166,25 +163,25 @@ fn load_chain_file(path: &Path) -> OpResult<chain::ChainStorage> {
     };
     match err.kind {
         // If there is no storage, create a new one
-        OpErrorKind::IoError(err) => {
-            match err.kind() {
-                ErrorKind::NotFound => return Ok(chain::ChainStorage::default()),
-                _ => return Err(OpError::from(err)),
-            }
-        }
+        OpErrorKind::IoError(err) => match err.kind() {
+            ErrorKind::NotFound => return Ok(chain::ChainStorage::default()),
+            _ => return Err(OpError::from(err)),
+        },
         kind @ _ => return Err(OpError::new(kind)),
     }
 }
 
 /// Parses args or panics if some requirements are not met.
 fn parse_args() -> OpResult<ParserOptions> {
-    let coins = &["bitcoin",
-                  "testnet3",
-                  "namecoin",
-                  "litecoin",
-                  "dogecoin",
-                  "myriadcoin",
-                  "unobtanium"];
+    let coins = &[
+        "bitcoin",
+        "testnet3",
+        "namecoin",
+        "litecoin",
+        "dogecoin",
+        "myriadcoin",
+        "unobtanium",
+    ];
     let matches = App::new("Multithreaded Blockchain Parser written in Rust")
         .version(crate_version!())
         .author("gcarq <michael.egger@tsn.at>")
@@ -265,34 +262,34 @@ fn parse_args() -> OpResult<ParserOptions> {
     // Set callback
     let callback: Box<Callback>;
     if let Some(ref matches) = matches.subcommand_matches("simplestats") {
-        callback = Box::new(try!(SimpleStats::new(matches)));
+        callback = Box::new(SimpleStats::new(matches)?);
     } else if let Some(ref matches) = matches.subcommand_matches("csvdump") {
-        callback = Box::new(try!(CsvDump::new(matches)));
+        callback = Box::new(CsvDump::new(matches)?);
     } else if let Some(ref matches) = matches.subcommand_matches("clusterizer") {
-        callback = Box::new(try!(Clusterizer::new(matches)));
+        callback = Box::new(Clusterizer::new(matches)?);
     } else if let Some(ref matches) = matches.subcommand_matches("utxodump") {
-        callback = Box::new(try!(UTXODump::new(matches)));
+        callback = Box::new(UTXODump::new(matches)?);
     } else if let Some(ref matches) = matches.subcommand_matches("txodump") {
-        callback = Box::new(try!(TXODump::new(matches)));
+        callback = Box::new(TXODump::new(matches)?);
     } else {
         clap::Error {
-                message: String::from("error: No Callback specified.\nFor more information try --help"),
-                kind: clap::ErrorKind::MissingSubcommand,
-                info: None,
-            }
-            .exit();
+            message: String::from("error: No Callback specified.\nFor more information try --help"),
+            kind: clap::ErrorKind::MissingSubcommand,
+            info: None,
+        }
+        .exit();
     }
 
     Ok(ParserOptions {
-           coin_type: coin_type,
-           callback: callback,
-           verify_merkle_root: verify_merkle_root,
-           thread_count: thread_count,
-           resume: resume,
-           reindex: reindex,
-           blockchain_dir: blockchain_path,
-           chain_storage_path: PathBuf::from(chain_storage_path),
-           worker_backlog: worker_backlog,
-           log_level_filter: log_level_filter,
-       })
+        coin_type: coin_type,
+        callback: callback,
+        verify_merkle_root: verify_merkle_root,
+        thread_count: thread_count,
+        resume: resume,
+        reindex: reindex,
+        blockchain_dir: blockchain_path,
+        chain_storage_path: PathBuf::from(chain_storage_path),
+        worker_backlog: worker_backlog,
+        log_level_filter: log_level_filter,
+    })
 }

@@ -1,7 +1,10 @@
+extern crate chrono;
+
 pub mod logger {
+    use common::chrono::prelude::*;
     use std::io::{stderr, stdout, Write};
-    use time::{self, strftime};
-    use log::{self, LogRecord, LogLevel, LogLevelFilter, LogMetadata, SetLoggerError};
+
+    use log::{self, LogLevel, LogLevelFilter, LogMetadata, LogRecord, SetLoggerError};
 
     pub struct SimpleLogger {
         log_filter: LogLevelFilter,
@@ -11,16 +14,21 @@ pub mod logger {
         pub fn init(log_filter: LogLevelFilter) -> Result<(), SetLoggerError> {
             log::set_logger(|max_log_level| {
                 max_log_level.set(log_filter);
-                Box::new(SimpleLogger { log_filter: log_filter })
+                Box::new(SimpleLogger {
+                    log_filter: log_filter,
+                })
             })
         }
 
         fn create_log_line(&self, record: &LogRecord) -> String {
-            format!("[{}] {} - {}: {}\n",
-                     strftime("%X", &time::now()).unwrap(),
-                     record.level(),
-                     record.target(),
-                     record.args())
+            let now = Local::now();
+            format!(
+                "[{}] {} - {}: {}\n",
+                now.to_string(),
+                record.level(),
+                record.target(),
+                record.args()
+            )
         }
     }
 

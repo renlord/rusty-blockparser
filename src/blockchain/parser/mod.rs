@@ -1,23 +1,23 @@
-use std::collections::{VecDeque, HashMap};
+use std::collections::{HashMap, VecDeque};
 use std::hash::BuildHasherDefault;
-use std::sync::{Arc, Mutex, mpsc};
+use std::sync::{mpsc, Arc, Mutex};
 use std::thread::{self, JoinHandle};
 
 use time;
 use twox_hash::XxHash;
 
-use blockchain::proto::Hashed;
-use blockchain::utils::blkfile::BlkFile;
 use blockchain::parser::worker::Worker;
 use blockchain::proto::block::Block;
 use blockchain::proto::header::BlockHeader;
+use blockchain::proto::Hashed;
+use blockchain::utils::blkfile::BlkFile;
 use errors::{OpError, OpErrorKind, OpResult};
 
 use ParserOptions;
 
-pub mod worker;
 pub mod chain;
 pub mod types;
+pub mod worker;
 
 /// Specifies ParseMode. The first time the blockchain needs to be indexed,
 /// because we just need the block hashes to determine the longest chain.
@@ -32,15 +32,15 @@ pub enum ParseResult {
     FullData(Block),
     Indexing(BlockHeader),
     Complete(String), // contains the name of the finished thread
-    Error(OpError), // Indicates critical error
+    Error(OpError),   // Indicates critical error
 }
 
 /// Small struct to hold statistics together
 #[derive(Default)]
 struct WorkerStats {
     pub n_complete_msgs: usize, // Number of complete messages received from workers
-    pub n_valid_blocks: u64, // Number of received results from workers
-    pub latest_blk_idx: u32, // Latest processed blk file index
+    pub n_valid_blocks: u64,    // Number of received results from workers
+    pub latest_blk_idx: u32,    // Latest processed blk file index
 }
 
 /// Implements simple thread pool pattern
@@ -50,17 +50,21 @@ pub struct BlockchainParser<'a> {
     unsorted_blocks: HashMap<[u8; 32], Block, BuildHasherDefault<XxHash>>, /* holds all blocks in parse mode FullData      */
     remaining_files: Arc<Mutex<VecDeque<BlkFile>>>, /* Remaining files (shared between all threads) */
     h_workers: Vec<JoinHandle<()>>, /* Worker job handles                           */
-    mode: ParseMode, /* ParseMode (FullData or Indexing)           */
+    mode: ParseMode,                /* ParseMode (FullData or Indexing)           */
     options: &'a mut ParserOptions, /* struct to hold cli arguments                 */
     chain_storage: chain::ChainStorage, /* Hash storage with the longest chain          */
-    stats: WorkerStats, /* struct for thread management & statistics    */
-    t_started: f64, /* Start timestamp                              */
+    stats: WorkerStats,             /* struct for thread management & statistics    */
+    t_started: f64,                 /* Start timestamp                              */
 }
 
 impl<'a> BlockchainParser<'a> {
     /// Instantiates a new Parser but does not start the workers.
-    pub fn new(options: &'a mut ParserOptions, parse_mode: ParseMode, blk_files: VecDeque<BlkFile>, chain_storage: chain::ChainStorage) -> Self {
-
+    pub fn new(
+        options: &'a mut ParserOptions,
+        parse_mode: ParseMode,
+        blk_files: VecDeque<BlkFile>,
+        chain_storage: chain::ChainStorage,
+    ) -> Self {
         info!(target: "parser", "Parsing {} blockchain ...", options.coin_type.name);
         match parse_mode {
             ParseMode::Indexing => {
@@ -85,17 +89,18 @@ impl<'a> BlockchainParser<'a> {
 
     /// Starts all workers. Needs an active mpsc channel
     pub fn start_worker(&mut self, tx_channel: mpsc::SyncSender<ParseResult>) -> OpResult<()> {
-
         self.t_started = time::precise_time_s();
         if self.mode == ParseMode::FullData {
-            (*self.options.callback).on_start(self.options.coin_type.clone(),
-                                              self.chain_storage.get_cur_height());
+            (*self.options.callback).on_start(
+                self.options.coin_type.clone(),
+                self.chain_storage.get_cur_height(),
+            );
         }
 
         // save latest blk file index for resume mode.
         self.stats.latest_blk_idx = match self.mode {
             ParseMode::Indexing => self.chain_storage.latest_blk_idx,
-            ParseMode::FullData => transform!(try!(self.remaining_files.lock()).back()).index,
+            ParseMode::FullData => transform!(self.remaining_files.lock()?.back()).index,
         };
 
         debug!(target: "parser", "Starting {} threads. {:?}",
@@ -108,25 +113,29 @@ impl<'a> BlockchainParser<'a> {
             let remaining_files = self.remaining_files.clone(); // Increment arc
             let mode = self.mode.clone();
 
-            let rem = try!(remaining_files.lock()).len();
+            let rem = remaining_files.lock()?.len();
             if rem == 0 {
                 return Ok(());
             }
 
             // Spawn worker
-            let child = thread::Builder::new()
-                .name(format!("worker-{}", i))
-                .spawn(move || match Worker::new(tx, remaining_files, coin_type, mode) {
-                           Ok(mut w) => w.process(),
-                           Err(OpError { kind: OpErrorKind::None, .. }) => {
-                               return;
-                           }
-                           Err(err) => {
-                    error!(target: thread::current().name().unwrap(), "{}", err);
-                    return;
-                }
-                       });
-            self.h_workers.push(try!(child));
+            let child =
+                thread::Builder::new().name(format!("worker-{}", i)).spawn(
+                    move || match Worker::new(tx, remaining_files, coin_type, mode) {
+                        Ok(mut w) => w.process(),
+                        Err(OpError {
+                            kind: OpErrorKind::None,
+                            ..
+                        }) => {
+                            return;
+                        }
+                        Err(err) => {
+                            error!(target: thread::current().name().unwrap(), "{}", err);
+                            return;
+                        }
+                    },
+                );
+            self.h_workers.push(child?);
         }
         Ok(())
     }
@@ -134,7 +143,6 @@ impl<'a> BlockchainParser<'a> {
     /// Dispatches all received data from workers.
     /// Blocks are passed to the user defined callback
     pub fn dispatch(&mut self, rx_channel: mpsc::Receiver<ParseResult>) -> OpResult<()> {
-
         let rx = rx_channel;
         let mut t_last_log = time::precise_time_s();
         let t_measure_frame = 10.0;
@@ -143,12 +151,13 @@ impl<'a> BlockchainParser<'a> {
             // Retrieve data from mpsc channel
             match rx.try_recv() {
                 Ok(result) => {
-                    try!(self.dispatch_worker_msg(result));
+                    self.dispatch_worker_msg(result)?;
 
                     // Some performance measurements and logging
                     let now = time::precise_time_s();
                     if now - t_last_log > t_measure_frame {
-                        let blocks_sec = self.stats
+                        let blocks_sec = self
+                            .stats
                             .n_valid_blocks
                             .checked_div((now - self.t_started) as u64)
                             .unwrap_or(1);
@@ -176,7 +185,9 @@ impl<'a> BlockchainParser<'a> {
                 }
             }
             // Check if all threads are finished
-            if self.stats.n_complete_msgs == self.h_workers.len() && self.chain_storage.remaining() == 0 {
+            if self.stats.n_complete_msgs == self.h_workers.len()
+                && self.chain_storage.remaining() == 0
+            {
                 info!(target: "dispatch", "All threads finished.");
                 return self.on_complete();
             }
@@ -245,7 +256,7 @@ impl<'a> BlockchainParser<'a> {
             }
             _ => (),
         };
-        try!(self.save_chain_state());
+        self.save_chain_state()?;
         Ok(())
     }
 
@@ -254,11 +265,11 @@ impl<'a> BlockchainParser<'a> {
         info!(target: "dispatch", "Saving block headers as {:?} ...", self.options.chain_storage_path);
         // Update chain storage
         let headers = match self.mode {
-            ParseMode::Indexing => try!(chain::ChainBuilder::extract_blockchain(&self.unsorted_headers)),
+            ParseMode::Indexing => chain::ChainBuilder::extract_blockchain(&self.unsorted_headers)?,
             ParseMode::FullData => Vec::new(),
         };
-        try!(self.chain_storage
-                 .extend(headers, &self.options.coin_type, self.stats.latest_blk_idx));
+        self.chain_storage
+            .extend(headers, &self.options.coin_type, self.stats.latest_blk_idx)?;
         self.chain_storage
             .serialize(self.options.chain_storage_path.as_path())
     }

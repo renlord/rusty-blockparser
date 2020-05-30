@@ -1,9 +1,13 @@
+use std::collections::HashMap;
 use std::fmt;
 
-use blockchain::proto::ToRaw;
-use blockchain::proto::varuint::VarUint;
+use std::hash::BuildHasherDefault;
+use twox_hash::XxHash;
+
 use blockchain::proto::script;
-use blockchain::utils::{self, le, arr_to_hex_swapped};
+use blockchain::proto::varuint::VarUint;
+use blockchain::proto::ToRaw;
+use blockchain::utils::{self, arr_to_hex_swapped, le};
 
 /// Simple transaction struct
 /// Please note: The txid is not stored here. See Hashed.
@@ -18,9 +22,18 @@ pub struct Tx {
 }
 
 impl Tx {
-    pub fn new(tx_version: u32, in_count: VarUint, inputs: &[TxInput], out_count: VarUint, outputs: &[TxOutput], tx_locktime: u32, version_id: u8) -> Self {
+    pub fn new(
+        tx_version: u32,
+        in_count: VarUint,
+        inputs: &[TxInput],
+        out_count: VarUint,
+        outputs: &[TxOutput],
+        tx_locktime: u32,
+        version_id: u8,
+    ) -> Self {
         // Evaluate and wrap all outputs to process them later
-        let evaluated_out = outputs.iter()
+        let evaluated_out = outputs
+            .iter()
             .cloned()
             .map(|o| EvaluatedTxOut::eval_script(o, version_id))
             .collect();
@@ -42,6 +55,22 @@ impl Tx {
         }
         return false;
     }
+
+    pub fn get_fees(
+        &self,
+        utxoset: &HashMap<TxOutpoint, (u64, usize), BuildHasherDefault<XxHash>>,
+    ) -> u64 {
+        let mut sum_out = 0;
+        for txout in self.outputs.iter() {
+            sum_out += txout.out.value;
+        }
+        let mut sum_in = 0;
+        for txin in self.inputs.iter() {
+            let (sumin, _) = utxoset.get(&txin.outpoint).unwrap();
+            sum_in += sumin;
+        }
+        sum_out - sum_in
+    }
 }
 
 impl fmt::Debug for Tx {
@@ -57,7 +86,8 @@ impl fmt::Debug for Tx {
 
 impl ToRaw for Tx {
     fn to_bytes(&self) -> Vec<u8> {
-        let mut bytes = Vec::with_capacity((4 + self.in_count.value + self.out_count.value + 4) as usize);
+        let mut bytes =
+            Vec::with_capacity((4 + self.in_count.value + self.out_count.value + 4) as usize);
 
         // Serialize version
         bytes.extend_from_slice(&le::u32_to_array(self.tx_version));
@@ -108,7 +138,6 @@ impl fmt::Debug for TxOutpoint {
     }
 }
 
-
 /// Holds TxInput informations
 #[derive(Clone)]
 pub struct TxInput {
@@ -140,7 +169,6 @@ impl fmt::Debug for TxInput {
             .finish()
     }
 }
-
 
 /// Evaluates script_pubkey and wraps TxOutput
 #[derive(Clone)]
