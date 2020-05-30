@@ -21,6 +21,7 @@ byteorder       = ">=1.1"
 rust-base58     = ">=0.0"
 seek_bufread    = ">=1.2"
 twox-hash       = ">=1.0.1"
+chrono          = ">=0.4"
 
 # The development profile, used for `cargo build`
 [profile.dev]
