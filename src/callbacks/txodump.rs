@@ -143,19 +143,26 @@ impl Callback for TXODump {
                 trace!(target: "TXODump [on_block] [TX inputs]", "Removing {:#?} from UTXO set.", tx_outpoint);
                 // Write TXOStat
                 {
-                    let (utxo_val, utxo_height) = self.utxo_set.get(&tx_outpoint).unwrap();
-                    let fee = usize::try_from(tx.value.get_fees(&self.utxo_set)).unwrap();
-                    let feerate = fee / tx.value.to_bytes().len();
-                    let coinage = block_height - utxo_height;
-                    // The input is spent, remove it from the UTXO set
-                    self.txo_writer
-                        .write_all(
-                            format!("{};{};{};{}\n", block_height, coinage, feerate, utxo_val)
-                                .as_bytes(),
-                        )
-                        .unwrap();
+                    match self.utxo_set.get(&tx_outpoint) {
+                        Some((utxo_val, utxo_height)) => {
+                            let fee = usize::try_from(tx.value.get_fees(&self.utxo_set)).unwrap();
+                            let feerate = fee / tx.value.to_bytes().len();
+                            let coinage = block_height - utxo_height;
+                            // The input is spent, remove it from the UTXO set
+                            self.txo_writer
+                                .write_all(
+                                    format!(
+                                        "{};{};{};{}\n",
+                                        block_height, coinage, feerate, utxo_val
+                                    )
+                                    .as_bytes(),
+                                )
+                                .unwrap();
+                            self.utxo_set.remove(&tx_outpoint);
+                        }
+                        _ => {}
+                    }
                 }
-                self.utxo_set.remove(&tx_outpoint);
             }
 
             // Transaction outputs
