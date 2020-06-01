@@ -66,8 +66,14 @@ impl Tx {
         }
         let mut sum_in = 0;
         for txin in self.inputs.iter() {
-            let (sumin, _) = utxoset.get(&txin.outpoint).unwrap();
-            sum_in += sumin;
+            match utxoset.get(&txin.outpoint) {
+                None => {
+                    //coinbase do not need to reference previous UTXOs.
+                }
+                Some((inval, _)) => {
+                    sum_in += inval;
+                }
+            }
         }
         if sum_in == 0 {
             0
