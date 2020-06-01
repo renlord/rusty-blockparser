@@ -255,7 +255,7 @@ fn parse_args() -> OpResult<ParserOptions> {
     if matches.value_of("blockchain-dir").is_some() {
         blockchain_path = PathBuf::from(matches.value_of("blockchain-dir").unwrap());
     }
-    let thread_count = value_t!(matches, "threads", u8).unwrap_or(2);
+    let mut thread_count = value_t!(matches, "threads", u8).unwrap_or(2);
     let chain_storage_path = matches.value_of("chain-storage").unwrap_or("chain.json");
     let worker_backlog = value_t!(matches, "backlog", usize).unwrap_or(100);
 
@@ -271,6 +271,8 @@ fn parse_args() -> OpResult<ParserOptions> {
         callback = Box::new(UTXODump::new(matches)?);
     } else if let Some(ref matches) = matches.subcommand_matches("txodump") {
         callback = Box::new(TXODump::new(matches)?);
+        info!("TXODump can only be done synchronously in blockheight, defaults to 1 thread.");
+        thread_count = 1;
     } else {
         clap::Error {
             message: String::from("error: No Callback specified.\nFor more information try --help"),

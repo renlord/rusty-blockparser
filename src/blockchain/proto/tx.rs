@@ -69,7 +69,11 @@ impl Tx {
             let (sumin, _) = utxoset.get(&txin.outpoint).unwrap();
             sum_in += sumin;
         }
-        sum_out - sum_in
+        if sum_in == 0 {
+            0
+        } else {
+            sum_in - sum_out
+        }
     }
 }
 
