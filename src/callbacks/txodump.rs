@@ -145,8 +145,8 @@ impl Callback for TXODump {
                 {
                     match self.utxo_set.get(&tx_outpoint) {
                         Some((utxo_val, utxo_height)) => {
-                            let fee = usize::try_from(tx.value.get_fees(&self.utxo_set)).unwrap();
-                            let feerate = fee / tx.value.to_bytes().len();
+                            let fee = tx.value.get_fees(&self.utxo_set);
+                            let feerate = fee / tx.value.to_bytes().len() as u64;
                             let coinage = block_height - utxo_height;
                             // The input is spent, remove it from the UTXO set
                             self.txo_writer
