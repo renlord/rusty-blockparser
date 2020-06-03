@@ -69,17 +69,14 @@ impl Tx {
             match utxoset.get(&txin.outpoint) {
                 None => {
                     //coinbase do not need to reference previous UTXOs.
+                    return 0
                 }
                 Some((inval, _)) => {
                     sum_in += inval;
                 }
             }
         }
-        if sum_in == 0 {
-            0
-        } else {
-            sum_in - sum_out
-        }
+        sum_in - sum_out
     }
 }
 

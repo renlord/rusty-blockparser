@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::convert::TryFrom;
 use std::fs::{self, File, OpenOptions};
 use std::hash::BuildHasherDefault;
 use std::io::{LineWriter, Write};
@@ -15,8 +14,6 @@ use blockchain::parser::types::CoinType;
 use blockchain::proto::block::Block;
 use blockchain::proto::tx::TxOutpoint;
 use blockchain::proto::ToRaw;
-use blockchain::utils::csv::CsvFile;
-use blockchain::utils::{arr_to_hex_swapped, hex_to_arr32_swapped};
 
 /// Dumps the UTXO set into a CSV file
 pub struct TXODump {
@@ -128,8 +125,6 @@ impl Callback for TXODump {
         debug!(target: "TXODump [on_block]", "Block: {}.", block_height);
 
         for tx in block.txs {
-            let txid_str = arr_to_hex_swapped(&tx.hash);
-            trace!(target: "TXODump [on_block]", "tx_id: {}.", txid_str);
             self.in_count += tx.value.in_count.value;
             self.out_count += tx.value.out_count.value;
 
@@ -143,12 +138,10 @@ impl Callback for TXODump {
                 trace!(target: "TXODump [on_block] [TX inputs]", "Removing {:#?} from UTXO set.", tx_outpoint);
                 // Write TXOStat
                 {
+                    let feerate = tx.value.get_fees(&self.utxo_set) / tx.value.to_bytes().len() as u64;
                     match self.utxo_set.get(&tx_outpoint) {
                         Some((utxo_val, utxo_height)) => {
-                            let fee = tx.value.get_fees(&self.utxo_set);
-                            let feerate = fee / tx.value.to_bytes().len() as u64;
                             let coinage = block_height - utxo_height;
-                            // The input is spent, remove it from the UTXO set
                             self.txo_writer
                                 .write_all(
                                     format!(
@@ -181,7 +174,7 @@ impl Callback for TXODump {
         self.tx_count += block.tx_count.value;
     }
 
-    fn on_complete(&mut self, block_height: usize) {
+    fn on_complete(&mut self, _block_height: usize) {
         // Rename temp files
         fs::rename(
             self.dump_folder.as_path().join("txo.csv.tmp"),
