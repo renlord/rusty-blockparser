@@ -68,8 +68,7 @@ impl Tx {
         for txin in self.inputs.iter() {
             match utxoset.get(&txin.outpoint) {
                 None => {
-                    //coinbase do not need to reference previous UTXOs.
-                    return 0
+                    panic!("spending non-existent coins {:?}, {}", txin.outpoint.txid, txin.outpoint.index);
                 }
                 Some((inval, _)) => {
                     sum_in += inval;

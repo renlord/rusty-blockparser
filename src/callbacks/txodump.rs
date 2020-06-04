@@ -135,6 +135,11 @@ impl Callback for TXODump {
                     index: input.outpoint.index,
                 };
 
+                // coinbase txinput has previous index of 0xFFFFFFFF
+                if tx_outpoint.index == 0xFFFFFFFF {
+                    continue;
+                }
+
                 trace!(target: "TXODump [on_block] [TX inputs]", "Removing {:#?} from UTXO set.", tx_outpoint);
                 // Write TXOStat
                 {
