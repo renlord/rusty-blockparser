@@ -128,38 +128,27 @@ impl Callback for TXODump {
             self.in_count += tx.value.in_count.value;
             self.out_count += tx.value.out_count.value;
 
+
             // Transaction inputs
-            for input in &tx.value.inputs {
-                let tx_outpoint = TxOutpoint {
-                    txid: input.outpoint.txid,
-                    index: input.outpoint.index,
-                };
+            if !tx.value.is_coinbase() {
+                let feerate = tx.value.get_fees(&self.utxo_set) / tx.value.to_bytes().len() as u64;
+                for input in &tx.value.inputs {
+                    let tx_outpoint = &input.outpoint;
 
-                // coinbase txinput has previous index of 0xFFFFFFFF
-                if tx_outpoint.index == 0xFFFFFFFF {
-                    continue;
-                }
-
-                trace!(target: "TXODump [on_block] [TX inputs]", "Removing {:#?} from UTXO set.", tx_outpoint);
-                // Write TXOStat
-                {
-                    let feerate = tx.value.get_fees(&self.utxo_set) / tx.value.to_bytes().len() as u64;
-                    match self.utxo_set.get(&tx_outpoint) {
-                        Some((utxo_val, utxo_height)) => {
-                            let coinage = block_height - utxo_height;
-                            self.txo_writer
-                                .write_all(
-                                    format!(
-                                        "{};{};{};{}\n",
-                                        block_height, coinage, feerate, utxo_val
-                                    )
-                                    .as_bytes(),
-                                )
-                                .unwrap();
-                            self.utxo_set.remove(&tx_outpoint);
-                        }
-                        _ => {}
-                    }
+                    trace!(target: "TXODump [on_block] [TX inputs]", "Removing {:#?} from UTXO set.", tx_outpoint);
+                    // Write TXOStat
+                    let (utxo_val, utxo_height) = self.utxo_set.get(&tx_outpoint).unwrap();
+                    let coinage = block_height - utxo_height;
+                    self.txo_writer
+                        .write_all(
+                            format!(
+                                "{};{};{};{}\n",
+                                block_height, coinage, feerate, utxo_val
+                            )
+                            .as_bytes(),
+                        )
+                        .unwrap();
+                    self.utxo_set.remove(tx_outpoint);
                 }
             }
 
@@ -172,8 +161,7 @@ impl Callback for TXODump {
                 let coin_value = output.out.value;
 
                 trace!(target: "TXODump [on_block] [TX outputs]", "Adding UTXO {:#?} to the UTXO set.", tx_outpoint);
-                self.utxo_set
-                    .insert(tx_outpoint, (coin_value, block_height));
+                self.utxo_set.insert(tx_outpoint, (coin_value, block_height));
             }
         }
         self.tx_count += block.tx_count.value;

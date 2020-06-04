@@ -68,15 +68,33 @@ impl Tx {
         for txin in self.inputs.iter() {
             match utxoset.get(&txin.outpoint) {
                 None => {
-                    panic!("spending non-existent coins {:?}, {}", txin.outpoint.txid, txin.outpoint.index);
+                    panic!("spending non-existent coins {}", txin.outpoint);
                 }
                 Some((inval, _)) => {
-                    sum_in += inval;
+                    sum_in += *inval;
                 }
             }
         }
         sum_in - sum_out
     }
+}
+
+#[test]
+fn test_get_fees() {
+    let mut utxoset : HashMap<TxOutpoint, (u64, usize), BuildHasherDefault<XxHash>> = Default::default();
+
+    let txo1 = TxOutpoint {
+        txid: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32],
+        index: 0,
+    };
+    let txo2 = TxOutpoint {
+        txid: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32],
+        index: 0,
+    };
+    utxoset.insert(txo1, (1, 1));
+    let (v, h) = utxoset.get(&txo2).unwrap();
+    assert_eq!(*v, 1 as u64);
+    assert_eq!(*h, 1 as usize);
 }
 
 impl fmt::Debug for Tx {
